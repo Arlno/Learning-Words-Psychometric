@@ -3,144 +3,195 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>אתר לימוד מילים</title>
+<title>אתר לימוד מילים - מקצועי</title>
 <style>
-body {
-    font-family: Arial;
-    text-align: center;
-    background: linear-gradient(135deg, #667eea, #764ba2);
-    color: white;
-    margin: 0;
-    padding: 20px;
-}
-.container {
-    background: rgba(255,255,255,0.1);
-    padding: 20px;
-    border-radius: 15px;
-    margin: 20px auto;
-    max-width: 400px;
-}
-input {
-    padding: 10px;
-    margin: 5px;
-    width: 80%;
-    border-radius: 8px;
-    border: none;
-}
-button {
-    padding: 10px 15px;
-    margin: 5px;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: bold;
-}
-button:hover {
-    opacity: 0.8;
-}
-.word-box {
-    font-size: 24px;
-    margin: 20px;
-}
-.progress {
-    margin-top: 15px;
-}
+body { font-family: Arial; text-align: center; background: linear-gradient(135deg, #667eea, #764ba2); color: white; margin: 0; padding: 20px; }
+.container { background: rgba(255,255,255,0.1); padding: 20px; border-radius: 15px; margin: 20px auto; max-width: 400px; }
+input { padding: 10px; margin: 5px; width: 80%; border-radius: 8px; border: none; }
+button { padding: 10px 15px; margin: 5px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+button:hover { opacity: 0.8; }
+.word-box { font-size: 24px; margin: 20px; }
+.progress { margin-top: 15px; }
+h2 { margin-top: 0; }
+canvas { margin-top: 15px; background: rgba(255,255,255,0.2); border-radius: 10px; }
 </style>
 </head>
 <body>
 
-<h1>📚 אתר לימוד מילים</h1>
+<h1>📚 אתר לימוד מילים מקצועי</h1>
 
-<div>
+<div class="container" id="authContainer">
+<h2>התחברות / הרשמה</h2>
+<input type="email" id="email" placeholder="אימייל"><br>
+<input type="password" id="password" placeholder="סיסמה"><br>
+<button onclick="register()">הרשם</button>
+<button onclick="login()">התחבר</button>
+<button onclick="logout()">התנתק</button>
+<div id="authMessage"></div>
+</div>
+
+<div class="container" id="appContainer" style="display:none;">
+<h2>בחר כיוון לימוד</h2>
 <button onclick="setMode('en')">אנגלית → עברית</button>
 <button onclick="setMode('he')">עברית → אנגלית</button>
-</div>
 
-<div class="container">
 <h2>הוספת מילה</h2>
 <input type="text" id="word" placeholder="מילה">
-<input type="text" id="translation" placeholder="תרגום">
-<br>
+<input type="text" id="translation" placeholder="תרגום"><br>
 <button onclick="addWord()">הוסף</button>
-</div>
 
-<div class="container">
 <h2>לימוד</h2>
 <div class="word-box" id="currentWord">אין מילים עדיין</div>
 <button onclick="showTranslation()">הצג תרגום</button>
 <button onclick="markCorrect()">ידעתי</button>
 <button onclick="markWrong()">לא ידעתי</button>
+
 <div class="progress" id="progress"></div>
+<canvas id="progressChart" width="300" height="150"></canvas>
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 <script>
-let words = JSON.parse(localStorage.getItem("words")) || { en: [], he: [] };
+// 🔹 Firebase config
+const firebaseConfig = {
+  apiKey: "AIzaSyDL_2DiBZmuZgK9wARn9u1m0gXaJkI2KGw",
+  authDomain: "learning-words-psychometric.firebaseapp.com",
+  projectId: "learning-words-psychometric",
+  storageBucket: "learning-words-psychometric.firebasestorage.app",
+  messagingSenderId: "172124382229",
+  appId: "1:172124382229:web:f23c5b36caecc7ef5d5a1c"
+};
+
+// 🔹 Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+// 🔹 Variables
+let words = { en: [], he: [] };
 let mode = "en";
 let currentIndex = null;
 
-function save() {
-    localStorage.setItem("words", JSON.stringify(words));
+// 🔹 Authentication
+auth.onAuthStateChanged(user => {
+    if (user) {
+        document.getElementById('authContainer').style.display = 'none';
+        document.getElementById('appContainer').style.display = 'block';
+        loadWords();
+    } else {
+        document.getElementById('authContainer').style.display = 'block';
+        document.getElementById('appContainer').style.display = 'none';
+    }
+});
+
+function register() {
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
+    auth.createUserWithEmailAndPassword(email,password)
+        .then(()=> document.getElementById('authMessage').innerText="נרשמת בהצלחה!")
+        .catch(e=> document.getElementById('authMessage').innerText=e.message);
 }
 
+function login() {
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('password').value;
+    auth.signInWithEmailAndPassword(email,password)
+        .then(()=> document.getElementById('authMessage').innerText="מחובר!")
+        .catch(e=> document.getElementById('authMessage').innerText=e.message);
+}
+
+function logout() {
+    auth.signOut();
+}
+
+// 🔹 Words
 function setMode(m) {
     mode = m;
     nextWord();
 }
 
 function addWord() {
-    let word = document.getElementById("word").value;
-    let translation = document.getElementById("translation").value;
+    const word = document.getElementById('word').value;
+    const translation = document.getElementById('translation').value;
+    if (!word || !translation) return alert("תמלא את שני השדות");
 
-    if (!word || !translation) {
-        alert("תמלא את שני השדות");
-        return;
-    }
+    db.collection('users').doc(auth.currentUser.uid).collection('words').add({
+        word, translation, mode, correct:0
+    }).then(()=> loadWords());
+}
 
-    words[mode].push({ word, translation, correct: 0 });
-    save();
-    alert("המילה נוספה!");
-    document.getElementById("word").value = "";
-    document.getElementById("translation").value = "";
+function loadWords() {
+    db.collection('users').doc(auth.currentUser.uid).collection('words').get()
+    .then(snapshot=>{
+        words = { en: [], he: [] };
+        snapshot.forEach(doc=>{
+            const data = doc.data();
+            words[data.mode].push({id: doc.id, ...data});
+        });
+        nextWord();
+        updateChart();
+    });
 }
 
 function nextWord() {
-    if (words[mode].length === 0) {
-        document.getElementById("currentWord").innerText = "אין מילים עדיין";
+    if (words[mode].length===0) {
+        document.getElementById('currentWord').innerText="אין מילים עדיין";
+        updateProgress();
         return;
     }
-
-    currentIndex = Math.floor(Math.random() * words[mode].length);
-    document.getElementById("currentWord").innerText = words[mode][currentIndex].word;
+    currentIndex = Math.floor(Math.random()*words[mode].length);
+    document.getElementById('currentWord').innerText=words[mode][currentIndex].word;
     updateProgress();
 }
 
 function showTranslation() {
-    if (currentIndex === null) return;
-    document.getElementById("currentWord").innerText =
-        words[mode][currentIndex].word + " = " +
-        words[mode][currentIndex].translation;
+    if(currentIndex===null) return;
+    const w = words[mode][currentIndex];
+    document.getElementById('currentWord').innerText = w.word + " = " + w.translation;
 }
 
 function markCorrect() {
-    if (currentIndex === null) return;
-    words[mode][currentIndex].correct++;
-    save();
-    nextWord();
+    if(currentIndex===null) return;
+    const w = words[mode][currentIndex];
+    db.collection('users').doc(auth.currentUser.uid).collection('words').doc(w.id)
+      .update({correct: w.correct+1}).then(()=> loadWords());
 }
 
 function markWrong() {
-    if (currentIndex === null) return;
     nextWord();
 }
 
+// 🔹 Progress
 function updateProgress() {
-    let total = words[mode].length;
-    let learned = words[mode].filter(w => w.correct >= 3).length;
-    document.getElementById("progress").innerText =
-        "התקדמות: " + learned + " מתוך " + total + " מילים נלמדו";
+    const total = words[mode].length;
+    const learned = words[mode].filter(w=>w.correct>=3).length;
+    document.getElementById('progress').innerText=`התקדמות: ${learned} מתוך ${total} מילים נלמדו`;
+    updateChart();
 }
 
-nextWord();
+// 🔹 Chart
+let chart=null;
+function updateChart() {
+    const ctx = document.getElementById('progressChart').getContext('2d');
+    const total = words[mode].length;
+    const learned = words[mode].filter(w=>w.correct>=3).length;
+    if(chart) chart.destroy();
+    chart = new Chart(ctx,{
+        type:'doughnut',
+        data:{
+            labels:['נלמדו','לא נלמדו'],
+            datasets:[{
+                label:'התקדמות',
+                data:[learned, total-learned],
+                backgroundColor:['#00ff00','#ff0000']
+            }]
+        }
+    });
+}
 </script>
 
 </body>
