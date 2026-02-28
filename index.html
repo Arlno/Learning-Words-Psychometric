@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="he">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>אתר לימוד מילים</title>
+<style>
+body {
+    font-family: Arial;
+    text-align: center;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+    margin: 0;
+    padding: 20px;
+}
+.container {
+    background: rgba(255,255,255,0.1);
+    padding: 20px;
+    border-radius: 15px;
+    margin: 20px auto;
+    max-width: 400px;
+}
+input {
+    padding: 10px;
+    margin: 5px;
+    width: 80%;
+    border-radius: 8px;
+    border: none;
+}
+button {
+    padding: 10px 15px;
+    margin: 5px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+}
+button:hover {
+    opacity: 0.8;
+}
+.word-box {
+    font-size: 24px;
+    margin: 20px;
+}
+.progress {
+    margin-top: 15px;
+}
+</style>
+</head>
+<body>
+
+<h1>📚 אתר לימוד מילים</h1>
+
+<div>
+<button onclick="setMode('en')">אנגלית → עברית</button>
+<button onclick="setMode('he')">עברית → אנגלית</button>
+</div>
+
+<div class="container">
+<h2>הוספת מילה</h2>
+<input type="text" id="word" placeholder="מילה">
+<input type="text" id="translation" placeholder="תרגום">
+<br>
+<button onclick="addWord()">הוסף</button>
+</div>
+
+<div class="container">
+<h2>לימוד</h2>
+<div class="word-box" id="currentWord">אין מילים עדיין</div>
+<button onclick="showTranslation()">הצג תרגום</button>
+<button onclick="markCorrect()">ידעתי</button>
+<button onclick="markWrong()">לא ידעתי</button>
+<div class="progress" id="progress"></div>
+</div>
+
+<script>
+let words = JSON.parse(localStorage.getItem("words")) || { en: [], he: [] };
+let mode = "en";
+let currentIndex = null;
+
+function save() {
+    localStorage.setItem("words", JSON.stringify(words));
+}
+
+function setMode(m) {
+    mode = m;
+    nextWord();
+}
+
+function addWord() {
+    let word = document.getElementById("word").value;
+    let translation = document.getElementById("translation").value;
+
+    if (!word || !translation) {
+        alert("תמלא את שני השדות");
+        return;
+    }
+
+    words[mode].push({ word, translation, correct: 0 });
+    save();
+    alert("המילה נוספה!");
+    document.getElementById("word").value = "";
+    document.getElementById("translation").value = "";
+}
+
+function nextWord() {
+    if (words[mode].length === 0) {
+        document.getElementById("currentWord").innerText = "אין מילים עדיין";
+        return;
+    }
+
+    currentIndex = Math.floor(Math.random() * words[mode].length);
+    document.getElementById("currentWord").innerText = words[mode][currentIndex].word;
+    updateProgress();
+}
+
+function showTranslation() {
+    if (currentIndex === null) return;
+    document.getElementById("currentWord").innerText =
+        words[mode][currentIndex].word + " = " +
+        words[mode][currentIndex].translation;
+}
+
+function markCorrect() {
+    if (currentIndex === null) return;
+    words[mode][currentIndex].correct++;
+    save();
+    nextWord();
+}
+
+function markWrong() {
+    if (currentIndex === null) return;
+    nextWord();
+}
+
+function updateProgress() {
+    let total = words[mode].length;
+    let learned = words[mode].filter(w => w.correct >= 3).length;
+    document.getElementById("progress").innerText =
+        "התקדמות: " + learned + " מתוך " + total + " מילים נלמדו";
+}
+
+nextWord();
+</script>
+
+</body>
+</html>
