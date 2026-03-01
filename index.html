@@ -3,19 +3,73 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>אתר לימוד מילים - מקצועי</title>
+<title>אתר לימוד מילים מקצועי</title>
+
 <style>
-body { font-family: Arial; text-align: center; background: linear-gradient(135deg, #667eea, #764ba2); color: white; margin: 0; padding: 20px; }
-.container { background: rgba(255,255,255,0.1); padding: 20px; border-radius: 15px; margin: 20px auto; max-width: 400px; }
-input { padding: 10px; margin: 5px; width: 80%; border-radius: 8px; border: none; }
-button { padding: 10px 15px; margin: 5px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
-button:hover { opacity: 0.8; }
-.word-box { font-size: 24px; margin: 20px; }
+body {
+    font-family: Arial;
+    text-align: center;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+    margin: 0;
+    padding: 20px;
+}
+
+.container {
+    background: rgba(255,255,255,0.1);
+    padding: 20px;
+    border-radius: 15px;
+    margin: 20px auto;
+    max-width: 500px;
+}
+
+input {
+    padding: 10px;
+    margin: 5px;
+    width: 80%;
+    border-radius: 8px;
+    border: none;
+}
+
+button {
+    padding: 10px 15px;
+    margin: 5px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+button:hover { opacity: 0.85; }
+
+.word-box {
+    font-size: 28px;
+    margin: 20px;
+    min-height: 40px;
+}
+
 .progress { margin-top: 15px; }
-h2 { margin-top: 0; }
-canvas { margin-top: 15px; background: rgba(255,255,255,0.2); border-radius: 10px; }
+
+canvas {
+    margin-top: 15px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 10px;
+}
+
+.word-list {
+    margin-top: 15px;
+    text-align: right;
+    font-size: 14px;
+}
+.word-item {
+    background: rgba(0,0,0,0.2);
+    padding: 6px;
+    border-radius: 6px;
+    margin: 4px 0;
+}
 </style>
 </head>
+
 <body>
 
 <h1>📚 אתר לימוד מילים מקצועי</h1>
@@ -31,6 +85,7 @@ canvas { margin-top: 15px; background: rgba(255,255,255,0.2); border-radius: 10p
 </div>
 
 <div class="container" id="appContainer" style="display:none;">
+
 <h2>בחר כיוון לימוד</h2>
 <button onclick="setMode('en')">אנגלית → עברית</button>
 <button onclick="setMode('he')">עברית → אנגלית</button>
@@ -40,14 +95,23 @@ canvas { margin-top: 15px; background: rgba(255,255,255,0.2); border-radius: 10p
 <input type="text" id="translation" placeholder="תרגום"><br>
 <button onclick="addWord()">הוסף</button>
 
-<h2>לימוד</h2>
+<h2>מצב לימוד</h2>
+<button onclick="startLearning()">למד</button>
+<button onclick="stopLearning()">עצור</button>
+
 <div class="word-box" id="currentWord">אין מילים עדיין</div>
-<button onclick="showTranslation()">הצג תרגום</button>
-<button onclick="markCorrect()">ידעתי</button>
-<button onclick="markWrong()">לא ידעתי</button>
+
+<button onclick="showTranslation()">הצג פירוש</button><br>
+<button onclick="markGood()">יודע טוב</button>
+<button onclick="markOk()">הצלחתי</button>
+<button onclick="markBad()">לא יודע</button>
 
 <div class="progress" id="progress"></div>
 <canvas id="progressChart" width="300" height="150"></canvas>
+
+<h3>רשימת מילים</h3>
+<div class="word-list" id="wordList"></div>
+
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
@@ -56,7 +120,7 @@ canvas { margin-top: 15px; background: rgba(255,255,255,0.2); border-radius: 10p
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <script>
-// 🔹 Firebase config
+// Firebase config
 const firebaseConfig = {
   apiKey: "AIzaSyDL_2DiBZmuZgK9wARn9u1m0gXaJkI2KGw",
   authDomain: "learning-words-psychometric.firebaseapp.com",
@@ -66,128 +130,162 @@ const firebaseConfig = {
   appId: "1:172124382229:web:f23c5b36caecc7ef5d5a1c"
 };
 
-// 🔹 Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-// 🔹 Variables
 let words = { en: [], he: [] };
 let mode = "en";
 let currentIndex = null;
+let quizMode = false;
+let chart = null;
 
-// 🔹 Authentication
 auth.onAuthStateChanged(user => {
     if (user) {
-        document.getElementById('authContainer').style.display = 'none';
-        document.getElementById('appContainer').style.display = 'block';
+        authContainer.style.display = "none";
+        appContainer.style.display = "block";
         loadWords();
     } else {
-        document.getElementById('authContainer').style.display = 'block';
-        document.getElementById('appContainer').style.display = 'none';
+        authContainer.style.display = "block";
+        appContainer.style.display = "none";
     }
 });
 
 function register() {
-    const email = document.getElementById('email').value;
-    const password = document.getElementById('password').value;
-    auth.createUserWithEmailAndPassword(email,password)
-        .then(()=> document.getElementById('authMessage').innerText="נרשמת בהצלחה!")
-        .catch(e=> document.getElementById('authMessage').innerText=e.message);
+    auth.createUserWithEmailAndPassword(email.value,password.value)
+    .then(()=>authMessage.innerText="נרשמת בהצלחה!")
+    .catch(e=>authMessage.innerText=e.message);
 }
 
 function login() {
-    const email = document.getElementById('email').value;
-    const password = document.getElementById('password').value;
-    auth.signInWithEmailAndPassword(email,password)
-        .then(()=> document.getElementById('authMessage').innerText="מחובר!")
-        .catch(e=> document.getElementById('authMessage').innerText=e.message);
+    auth.signInWithEmailAndPassword(email.value,password.value)
+    .then(()=>authMessage.innerText="מחובר!")
+    .catch(e=>authMessage.innerText=e.message);
 }
 
-function logout() {
-    auth.signOut();
-}
+function logout() { auth.signOut(); }
 
-// 🔹 Words
 function setMode(m) {
     mode = m;
     nextWord();
-}
-
-function addWord() {
-    const word = document.getElementById('word').value;
-    const translation = document.getElementById('translation').value;
-    if (!word || !translation) return alert("תמלא את שני השדות");
-
-    db.collection('users').doc(auth.currentUser.uid).collection('words').add({
-        word, translation, mode, correct:0
-    }).then(()=> loadWords());
-}
-
-function loadWords() {
-    db.collection('users').doc(auth.currentUser.uid).collection('words').get()
-    .then(snapshot=>{
-        words = { en: [], he: [] };
-        snapshot.forEach(doc=>{
-            const data = doc.data();
-            words[data.mode].push({id: doc.id, ...data});
-        });
-        nextWord();
-        updateChart();
-    });
-}
-
-function nextWord() {
-    if (words[mode].length===0) {
-        document.getElementById('currentWord').innerText="אין מילים עדיין";
-        updateProgress();
-        return;
-    }
-    currentIndex = Math.floor(Math.random()*words[mode].length);
-    document.getElementById('currentWord').innerText=words[mode][currentIndex].word;
     updateProgress();
 }
 
-function showTranslation() {
-    if(currentIndex===null) return;
-    const w = words[mode][currentIndex];
-    document.getElementById('currentWord').innerText = w.word + " = " + w.translation;
+function addWord() {
+    if (!word.value || !translation.value) return alert("תמלא את שני השדות");
+
+    db.collection("users").doc(auth.currentUser.uid)
+    .collection("words")
+    .add({
+        word: word.value,
+        translation: translation.value,
+        mode: mode,
+        level: 0
+    }).then(()=>{
+        word.value="";
+        translation.value="";
+        loadWords();
+    });
 }
 
-function markCorrect() {
-    if(currentIndex===null) return;
-    const w = words[mode][currentIndex];
-    db.collection('users').doc(auth.currentUser.uid).collection('words').doc(w.id)
-      .update({correct: w.correct+1}).then(()=> loadWords());
+function loadWords() {
+    db.collection("users").doc(auth.currentUser.uid)
+    .collection("words")
+    .get()
+    .then(snapshot=>{
+        words = { en: [], he: [] };
+        wordList.innerHTML="";
+        snapshot.forEach(doc=>{
+            const data = doc.data();
+            words[data.mode].push({id:doc.id,...data});
+
+            wordList.innerHTML += `
+            <div class="word-item">
+                ${data.word} = ${data.translation}
+                <button onclick="editWord('${doc.id}','${data.word}','${data.translation}')">ערוך</button>
+                <button onclick="deleteWord('${doc.id}')">מחק</button>
+            </div>`;
+        });
+        nextWord();
+        updateProgress();
+    });
 }
 
-function markWrong() {
+function deleteWord(id){
+    db.collection("users").doc(auth.currentUser.uid)
+    .collection("words").doc(id).delete()
+    .then(()=>loadWords());
+}
+
+function editWord(id, oldWord, oldTranslation){
+    const newWord = prompt("ערוך מילה:", oldWord);
+    const newTranslation = prompt("ערוך תרגום:", oldTranslation);
+    if(!newWord || !newTranslation) return;
+
+    db.collection("users").doc(auth.currentUser.uid)
+    .collection("words").doc(id)
+    .update({word:newWord,translation:newTranslation})
+    .then(()=>loadWords());
+}
+
+function startLearning(){
+    quizMode=true;
     nextWord();
 }
 
-// 🔹 Progress
-function updateProgress() {
-    const total = words[mode].length;
-    const learned = words[mode].filter(w=>w.correct>=3).length;
-    document.getElementById('progress').innerText=`התקדמות: ${learned} מתוך ${total} מילים נלמדו`;
-    updateChart();
+function stopLearning(){
+    quizMode=false;
+    currentWord.innerText="מצב לימוד הופסק";
 }
 
-// 🔹 Chart
-let chart=null;
-function updateChart() {
-    const ctx = document.getElementById('progressChart').getContext('2d');
-    const total = words[mode].length;
-    const learned = words[mode].filter(w=>w.correct>=3).length;
+function nextWord(){
+    if(words[mode].length===0){
+        currentWord.innerText="אין מילים";
+        return;
+    }
+    currentIndex=Math.floor(Math.random()*words[mode].length);
+    const w=words[mode][currentIndex];
+    currentWord.innerText = (mode==="en") ? w.word : w.translation;
+}
+
+function showTranslation(){
+    if(currentIndex===null) return;
+    const w=words[mode][currentIndex];
+    currentWord.innerText =
+        (mode==="en") ?
+        w.word+" = "+w.translation :
+        w.translation+" = "+w.word;
+}
+
+function markGood(){ updateLevel(2); }
+function markOk(){ updateLevel(1); }
+function markBad(){ updateLevel(0); }
+
+function updateLevel(level){
+    if(currentIndex===null) return;
+    const w=words[mode][currentIndex];
+
+    db.collection("users").doc(auth.currentUser.uid)
+    .collection("words").doc(w.id)
+    .update({level:level})
+    .then(()=>loadWords());
+}
+
+function updateProgress(){
+    const total=words[mode].length;
+    const learned=words[mode].filter(w=>w.level===2).length;
+    progress.innerText=`התקדמות: ${learned} מתוך ${total} מילים נלמדו`;
+
+    const ctx=document.getElementById("progressChart").getContext("2d");
     if(chart) chart.destroy();
-    chart = new Chart(ctx,{
-        type:'doughnut',
+
+    chart=new Chart(ctx,{
+        type:"doughnut",
         data:{
-            labels:['נלמדו','לא נלמדו'],
+            labels:["נלמדו","לא נלמדו"],
             datasets:[{
-                label:'התקדמות',
-                data:[learned, total-learned],
-                backgroundColor:['#00ff00','#ff0000']
+                data:[learned,total-learned],
+                backgroundColor:["#00ff88","#ff4d4d"]
             }]
         }
     });
